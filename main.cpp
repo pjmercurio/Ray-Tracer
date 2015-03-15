@@ -226,36 +226,17 @@ float computeTriangleIntersection(triangle t, float x, float y) {
          1, t.bz - t.az, t.cz - t.az;
 
   Vector3f x_vector = A.colPivHouseholderQr().solve(b);
-
-  // Vector3f intersection;
-  // intersection << x, y, x_vector(0);
-
-  // float alpha = 1 - x_vector(1) - x_vector(2);
-
-  // Vector3f bary_intersection;
-  // bary_intersection << alpha*t.ax + x_vector(1)*t.bx + x_vector(2)*t.cx, alpha*t.ay + x_vector(1)*t.by + x_vector(2)*t.cy, alpha*t.az + x_vector(1)*t.bz + x_vector(2)*t.cz;
-
-  // Vector3f difference(bary_intersection - intersection);
   
-  //if (abs(difference(0)) < 0.01 && abs(difference(1)) < 0.01 && abs(difference(1)) < 0.01)  {
     if (x_vector(0) >= 0 && x_vector(1) >= 0 && x_vector(2) >= 0) {
       if (x_vector(1) + x_vector(2) <= 1)
-        cout << "X_vector: " << x_vector << "\n";
         return x_vector(0);
     }
-  //}                           
   return FLT_MAX;
-
-  //cout << "X_vector: " << x_vector << "\n";
-
-  
-  
 }
 
 
 //****************************************************
 // Iterate thru all objects in scene and return object w/ closest intersection
-// 
 //****************************************************
 pixel lookAtObjects(float x, float y) {
   float minDist = FLT_MAX;
