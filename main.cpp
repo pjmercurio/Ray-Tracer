@@ -24,6 +24,8 @@ using namespace std;
 using namespace cimg_library;
 
 
+#define LENGTH 1000
+#define WIDTH 1000
 #define PI 3.14159265  // Should be used from mathlib
 inline float sqr(float x) { return x*x; }
 
@@ -34,7 +36,7 @@ inline float sqr(float x) { return x*x; }
 
 
 // Initialize the CImg file with its dimensions and color
-CImg<unsigned char> main_image(1000, 700, 1, 3, 0);
+CImg<unsigned char> main_image(WIDTH, LENGTH, 1, 3, 0);
 
 struct camera {
   float ex, ey, ez, llx, lly, llz, lrx, lry, lrz, ulx, uly, ulz, urx, ury, urz;
@@ -92,7 +94,107 @@ triangle triangle_array[5];
 sphere sphere_array[5];
 material material_array[5];
 
-pixel image_buffer[1000][1000];
+pixel image_buffer[WIDTH][LENGTH];
+
+void calculatePhongShading(float x, float y, float z, float radius) {
+
+  int i,j;  // Pixel indices
+
+  int minI = max(0,(int)floor(x-radius));
+  int maxI = min(WIDTH-1,(int)ceil(x+radius));
+
+  int minJ = max(0,(int)floor(y-radius));
+  int maxJ = min(LENGTH-1,(int)ceil(y+radius));
+
+
+  /*for (i=0; i < 1000; i++) {
+    for (j=0; j < 1000; j++) {
+
+      // Location of the center of pixel relative to center of sphere
+      float x = (i+0.5-centerX);
+      float y = (j+0.5-centerY);
+
+      float dist = sqrt(sqr(x) + sqr(y));
+
+      if (dist<=radius) {
+
+        // This is the front-facing Z coordinate
+        // float z = sqrt(radius*radius-dist*dist);
+
+        Vector3f pixel(x, y, z);
+        pixel.normalize();
+        Vector3f surfaceNormal(x, y, z);
+        surfaceNormal.normalize();
+        Vector3f R(0.0, 0.0, 0.0);
+
+        for (int p = 0; p < point_light_count; p++) {
+          Vector3f lightloc(pl_array[p].x, pl_array[p].y, pl_array[p].z);
+          Vector3f lightcolor(pl_array[p].R,pl_array[p].G,pl_array[p].B);
+          //printf("Light stuff: %f %f %f %f %f %f\n",pl_array[p].x, pl_array[p].y, pl_array[p].z,pl_array[p].R,pl_array[p].G,pl_array[p].B);
+          lightloc = lightloc - pixel;
+          lightloc.normalize();
+          //std::cout << "Light: " << lightloc << "\n";
+
+          Vector3f new_ambient(ambient_term(0)*lightcolor(0),ambient_term(1)*lightcolor(1),ambient_term(2)*lightcolor(2));
+          R += new_ambient; // Add ambient term for each point light
+
+          float d = lightloc.dot(surfaceNormal);
+          float color = fmax(d, 0);
+          color *= d;
+
+          Vector3f new_diffuse(diffuse_term(0)*lightcolor(0),diffuse_term(1)*lightcolor(1),diffuse_term(2)*lightcolor(2));
+
+          R += color * new_diffuse;
+
+          Vector3f rd = (-1 * lightloc) + (2 * lightloc.dot(surfaceNormal) * surfaceNormal);
+          rd.normalize();
+          Vector3f v_vec(0, 0, 1);
+          float rvec = rd.dot(v_vec);
+          rvec = fmax(rvec, 0);
+          Vector3f new_specular(specular_term(0)*lightcolor(0),specular_term(1)*lightcolor(1),specular_term(2)*lightcolor(2));
+
+          R += pow(rvec, sp_V) * new_specular;
+
+        }
+
+        for (int p = 0; p < directional_light_count; p++) {
+          Vector3f lightloc(dl_array[p].x, dl_array[p].y, dl_array[p].z);
+          Vector3f lightcolor(dl_array[p].R,dl_array[p].G,dl_array[p].B);
+          lightloc = -1*lightloc;
+          lightloc.normalize();
+
+          Vector3f new_ambient(ambient_term(0)*lightcolor(0),ambient_term(1)*lightcolor(1),ambient_term(2)*lightcolor(2));
+          R += new_ambient; // Add ambient term for each point light
+
+          float d = lightloc.dot(surfaceNormal);
+          float color = fmax(d, 0);
+          color *= d;
+
+          Vector3f new_diffuse(diffuse_term(0)*lightcolor(0),diffuse_term(1)*lightcolor(1),diffuse_term(2)*lightcolor(2));
+
+          R += color * new_diffuse;
+
+          Vector3f rd = (-1 * lightloc) + (2 * lightloc.dot(surfaceNormal) * surfaceNormal);
+          rd.normalize();
+          Vector3f v_vec(0, 0, 1);
+          float rvec = rd.dot(v_vec);
+          rvec = fmax(rvec, 0);
+          Vector3f new_specular(specular_term(0)*lightcolor(0),specular_term(1)*lightcolor(1),specular_term(2)*lightcolor(2));
+
+          R += pow(rvec, sp_V) * new_specular;
+
+        }
+
+        setPixel(i, j, R(0), R(1), R(2));
+
+        // This is amusing, but it assumes negative color values are treated reasonably.
+        // setPixel(i,j, x/radius, y/radius, z/radius );
+      }
+
+
+    }
+  }*/
+}
 
 
 
@@ -114,8 +216,40 @@ float computeSphereIntersection(sphere s, float x, float y) {
   }
 }
 
-float computeTriangleIntersection(triangle t, int x, int y) {
+float computeTriangleIntersection(triangle t, float x, float y) {
+  Matrix3f A;
+  Vector3f b;
 
+  b << -t.ax, -t.ay, -t.az;
+  A << -x, t.bx - t.ax, t.cx - t.ax,
+         -y, t.by - t.ay, t.cy - t.ay,
+         1, t.bz - t.az, t.cz - t.az;
+
+  Vector3f x_vector = A.colPivHouseholderQr().solve(b);
+
+  // Vector3f intersection;
+  // intersection << x, y, x_vector(0);
+
+  // float alpha = 1 - x_vector(1) - x_vector(2);
+
+  // Vector3f bary_intersection;
+  // bary_intersection << alpha*t.ax + x_vector(1)*t.bx + x_vector(2)*t.cx, alpha*t.ay + x_vector(1)*t.by + x_vector(2)*t.cy, alpha*t.az + x_vector(1)*t.bz + x_vector(2)*t.cz;
+
+  // Vector3f difference(bary_intersection - intersection);
+  
+  //if (abs(difference(0)) < 0.01 && abs(difference(1)) < 0.01 && abs(difference(1)) < 0.01)  {
+    if (x_vector(0) >= 0 && x_vector(1) >= 0 && x_vector(2) >= 0) {
+      if (x_vector(1) + x_vector(2) <= 1)
+        cout << "X_vector: " << x_vector << "\n";
+        return x_vector(0);
+    }
+  //}                           
+  return FLT_MAX;
+
+  //cout << "X_vector: " << x_vector << "\n";
+
+  
+  
 }
 
 
@@ -144,16 +278,22 @@ pixel lookAtObjects(float x, float y) {
       isTriangle = true;
     }
   }
-  //printf("Mindist: %f\n",minDist);
+  // No intersection, paint black pixel
   if (minDist == FLT_MAX) {
     pixel temp = {0, 0, 0};
     return temp;
   }
+  // First intersection is a triangle, calculate for triangle
   else if (isTriangle == true) {
-
+    pixel temp = {255, 255, 255};
+    return temp;
   }
-  pixel temp = {255, 255, 255};
-  return temp;
+  // First intersection is a sphere, calculate for sphere
+  else {
+    pixel temp = {255, 255, 255};
+    return temp;
+  }
+  
 }
 
 
@@ -173,8 +313,8 @@ pixel traceRay(int x, int y) {
 // Fill the pixel buffer with traced rays
 //****************************************************
 void fillBuffer() {
-  for (int i = 0; i < 1000; i++) {
-    for (int j = 0; j < 1000; j++){
+  for (int i = 0; i < WIDTH; i++) {
+    for (int j = 0; j < LENGTH; j++){
         pixel temp = traceRay(i, j);
         image_buffer[i][j].R = temp.R;
         image_buffer[i][j].G = temp.G;
@@ -333,8 +473,8 @@ void parseInput(int argc, char *argv[]) {
 //****************************************************
 void drawImage() {
   fillBuffer();
-  for (int i = 0; i < 1000; i++) {
-    for (int j = 0; j < 700; j++){
+  for (int i = 0; i < WIDTH; i++) {
+    for (int j = 0; j < LENGTH; j++){
       main_image(i, j, 0) = image_buffer[i][j].R;
       main_image(i, j, 1) = image_buffer[i][j].G;
       main_image(i, j, 2) = image_buffer[i][j].B;
