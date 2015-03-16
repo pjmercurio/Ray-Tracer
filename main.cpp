@@ -214,8 +214,8 @@ float computeTriangleIntersection(triangle t, float x, float y) {
   }
 
   b << -t.ax, -t.ay, -t.az;
-  A << -x, t.bx - t.ax, t.cx - t.ax,
-         -y, t.by - t.ay, t.cy - t.ay,
+  A << x, t.bx - t.ax, t.cx - t.ax,
+         y, t.by - t.ay, t.cy - t.ay,
          1, t.bz - t.az, t.cz - t.az;
 
   Vector3f x_vector = A.colPivHouseholderQr().solve(b);
@@ -265,7 +265,7 @@ pixel lookAtObjects(float x, float y) {
   // First intersection is a sphere, calculate for sphere
   else {
     //printf("reach");
-    pixel temp = calculatePhongShading(minDist*x, minDist*y, minDist, nearestSphere);
+    pixel temp = calculatePhongShading(minDist*x, minDist*y, -minDist, nearestSphere);
     //pixel temp = {255, 255, 255};
     return temp;
   }
@@ -278,8 +278,8 @@ pixel lookAtObjects(float x, float y) {
 // Trace a ray through pixel at (x, y)
 //****************************************************
 pixel traceRay(int x, int y) {
-  float x1 = -1.0 + ((2.0*x)/1000.0);
-  float y1 = 1.0 - ((2.0*y)/1000.0);
+  float x1 = 1.0 - ((2.0*x)/1000.0);
+  float y1 = -1.0 + ((2.0*y)/1000.0);
   pixel temp = lookAtObjects(x1, y1);
   return(temp);
 }
