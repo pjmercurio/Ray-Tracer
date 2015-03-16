@@ -43,9 +43,11 @@ struct camera {
 };
 struct sphere {
   float cx, cy, cz, r;
+  int mat_num;
 };
 struct triangle {
   float ax, ay, az, bx, by, bz, cx, cy, cz;
+  int mat_num;
 };
 struct ambient_light {
   float R, G, B;
@@ -71,6 +73,7 @@ int point_light_count = 0;
 int directional_light_count = 0;
 int triangle_count = 0;
 int sphere_count = 0;
+int material_count = 0;
 
 Vector3f current_translation(0, 0, 0);
 Vector3f current_rotation(0, 0, 0);
@@ -86,26 +89,18 @@ camera the_camera = {0,  0,  0,
                      1, -1, -1,
                     -1, -1, -1};
 
-material current_material;
 
-ambient_light al_array[5];
-point_light pl_array[5];
-directional_light dl_array[5];
-triangle triangle_array[5];
-sphere sphere_array[5];
+ambient_light al_array[10];
+point_light pl_array[10];
+directional_light dl_array[10];
+triangle triangle_array[10];
+sphere sphere_array[10];
+material material_array[10];
 
 pixel image_buffer[WIDTH][LENGTH];
 
 pixel calculatePhongShading(float x, float y, float z, sphere s) {
 
-
-      // Location of the center of pixel relative to center of sphere
-      //float x = (i+0.5-x);
-      //float y = (j+0.5-y);
-
-
-        // This is the front-facing Z coordinate
-        // float z = sqrt(radius*radius-dist*dist);
   printf("Z: %f\n",z);
 
         Vector3f piece(x, y, z);
@@ -125,14 +120,14 @@ pixel calculatePhongShading(float x, float y, float z, sphere s) {
           lightloc.normalize();
           //std::cout << "Light: " << lightloc << "\n";
 
-          Vector3f new_ambient(current_material.kar*lightcolor(0),current_material.kag*lightcolor(1),current_material.kab*lightcolor(2));
+          Vector3f new_ambient(material_array[s.mat_num].kar*lightcolor(0),material_array[s.mat_num].kag*lightcolor(1),material_array[s.mat_num].kab*lightcolor(2));
           R += new_ambient; // Add ambient term for each point light
 
           float d = lightloc.dot(surfaceNormal);
           float color = fmax(d, 0);
           color *= d;
 
-          Vector3f new_diffuse(current_material.kdr*lightcolor(0),current_material.kdg*lightcolor(1),current_material.kdb*lightcolor(2));
+          Vector3f new_diffuse(material_array[s.mat_num].kdr*lightcolor(0),material_array[s.mat_num].kdg*lightcolor(1),material_array[s.mat_num].kdb*lightcolor(2));
 
           R += color * new_diffuse;
 
@@ -142,9 +137,9 @@ pixel calculatePhongShading(float x, float y, float z, sphere s) {
           v_vec.normalize();
           float rvec = rd.dot(v_vec);
           rvec = fmax(rvec, 0);
-          Vector3f new_specular(current_material.ksr*lightcolor(0),current_material.ksg*lightcolor(1),current_material.ksb*lightcolor(2));
+          Vector3f new_specular(material_array[s.mat_num].ksr*lightcolor(0),material_array[s.mat_num].ksg*lightcolor(1),material_array[s.mat_num].ksb*lightcolor(2));
 
-          R += pow(rvec, current_material.ksp) * new_specular;
+          R += pow(rvec, material_array[s.mat_num].ksp) * new_specular;
 
         }
 
@@ -154,14 +149,14 @@ pixel calculatePhongShading(float x, float y, float z, sphere s) {
           lightloc = -1*lightloc;
           lightloc.normalize();
 
-          Vector3f new_ambient(current_material.kar*lightcolor(0),current_material.kag*lightcolor(1),current_material.kab*lightcolor(2));
+          Vector3f new_ambient(material_array[s.mat_num].kar*lightcolor(0),material_array[s.mat_num].kag*lightcolor(1),material_array[s.mat_num].kab*lightcolor(2));
           R += new_ambient; // Add ambient term for each point light
 
           float d = lightloc.dot(surfaceNormal);
           float color = fmax(d, 0);
           color *= d;
 
-          Vector3f new_diffuse(current_material.kdr*lightcolor(0),current_material.kdg*lightcolor(1),current_material.kdb*lightcolor(2));
+          Vector3f new_diffuse(material_array[s.mat_num].kdr*lightcolor(0),material_array[s.mat_num].kdg*lightcolor(1),material_array[s.mat_num].kdb*lightcolor(2));
 
           R += color * new_diffuse;
 
@@ -170,9 +165,9 @@ pixel calculatePhongShading(float x, float y, float z, sphere s) {
           Vector3f v_vec(-x, -y, -z);
           v_vec.normalize();
           float rvec = rd.dot(v_vec);
-          Vector3f new_specular(current_material.ksr*lightcolor(0),current_material.ksg*lightcolor(1),current_material.ksb*lightcolor(2));
+          Vector3f new_specular(material_array[s.mat_num].ksr*lightcolor(0),material_array[s.mat_num].ksg*lightcolor(1),material_array[s.mat_num].ksb*lightcolor(2));
 
-          R += pow(rvec, current_material.ksp) * new_specular;
+          R += pow(rvec, material_array[s.mat_num].ksp) * new_specular;
 
         }
 
@@ -195,7 +190,6 @@ float computeSphereIntersection(sphere s, float x, float y) {
 
   float discriminant = b*b - 4*a*c;
   //printf("discriminant: %f\n",discriminant);
-  //printf("reach");
   if (discriminant <= 0) {
 
     return FLT_MAX;
@@ -214,8 +208,6 @@ float computeTriangleIntersection(triangle t, float x, float y) {
   Vector3f v2(t.cx - t.ax, t.cy - t.ay, t.cz - t.az);
 
   Vector3f cross_vector = v2.cross(v1);
-
-  //cout << "Cross vector: " << cross_vector(0) << " " << cross_vector(1) << " " << cross_vector(2) << "\n";
 
   if (cross_vector(0) == 0 && cross_vector(1) == 0 && cross_vector(2) == 0) {
     return FLT_MAX;
@@ -246,8 +238,6 @@ pixel lookAtObjects(float x, float y) {
   sphere nearestSphere;
   for (int i = 0; i < sphere_count; i++) {
     float temp = computeSphereIntersection(sphere_array[i], x, y);
-    //printf("Temp: %f\n",temp);
-
     if (temp < minDist) {
       minDist = temp;
       nearestSphere = sphere_array[i];
@@ -361,6 +351,7 @@ void parseInput(int argc, char *argv[]) {
       temp.cy = atof(argv[i+2]);
       temp.cz = atof(argv[i+3]);
       temp.r = atof(argv[i+4]);
+      temp.mat_num = material_count-1;
       sphere_array[sphere_count] = temp;
       sphere_count += 1;
       i += 5;
@@ -376,6 +367,7 @@ void parseInput(int argc, char *argv[]) {
       temp.cx = atof(argv[i+7]);
       temp.cy = atof(argv[i+8]);
       temp.cz = atof(argv[i+9]);
+      temp.mat_num = material_count-1;
       triangle_array[triangle_count] = temp;
       triangle_count += 1;
       i += 10;
@@ -429,7 +421,8 @@ void parseInput(int argc, char *argv[]) {
       temp.krr = atof(argv[i+11]);
       temp.krg = atof(argv[i+12]);
       temp.krb = atof(argv[i+13]);
-      current_material = temp;
+      material_array[material_count] = temp;
+      material_count += 1;
       i += 14;
     }
     else if (strcmp(argv[i], "obj") == 0) {
