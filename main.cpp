@@ -274,8 +274,114 @@ void transformObjects() {
       }
     }
 
-    for (int p = 0; p < triangle_count; p++) {
-
+    for (int j = 0; j < triangle_count; j++) {
+      Vector4f tempTriA(triangle_array[j].ax, triangle_array[j].ay, triangle_array[j].az, 1);
+      Vector4f tempTriB(triangle_array[j].bx, triangle_array[j].by, triangle_array[j].bz, 1);
+      Vector4f tempTriC(triangle_array[j].cx, triangle_array[j].cy, triangle_array[j].cz, 1);
+      for (int i = transformation_count - 1; i >= 0; i--) {
+        transformation curTransformation = transformation_array[i];
+        if (curTransformation.type == 't') {
+          Matrix4f tempTranslator;
+          tempTranslator << 1, 0, 0, curTransformation.x,
+                            0, 1, 0, curTransformation.y,
+                            0, 0, 1, curTransformation.z,
+                            0, 0, 0, 1;
+          Vector4f newTriA = tempTranslator*tempTriA;
+          Vector4f newTriB = tempTranslator*tempTriB;
+          Vector4f newTriC = tempTranslator*tempTriC;
+          triangle_array[j].ax = newTriA(0);
+          triangle_array[j].ay = newTriA(1);
+          triangle_array[j].az = newTriA(2);
+          triangle_array[j].bx = newTriB(0);
+          triangle_array[j].by = newTriB(1);
+          triangle_array[j].bz = newTriB(2);
+          triangle_array[j].cx = newTriC(0);
+          triangle_array[j].cy = newTriC(1);
+          triangle_array[j].cz = newTriC(2);
+        }
+        else if (curTransformation.type == 'r') {
+          Matrix4f tempRotatorX;
+          printf("COS(curTransformation.x): %f\n",cos(curTransformation.x));
+          tempRotatorX << 1, 0, 0, 0,
+                          0, cos(curTransformation.x), -sin(curTransformation.x), 0,
+                          0, sin(curTransformation.x), cos(curTransformation.x), 0,
+                            0, 0, 0, 1;                
+          Matrix4f tempRotatorY;
+          tempRotatorY << cos(curTransformation.y), 0, sin(curTransformation.y), 0,
+                            0, 1, 0, 0,
+                            -sin(curTransformation.y), 0, cos(curTransformation.y), 0,
+                            0, 0, 0, 1;
+          Matrix4f tempRotatorZ;
+          tempRotatorZ << cos(curTransformation.z), -sin(curTransformation.z), 0, 0,
+                            sin(curTransformation.z), cos(curTransformation.z), 0, 0,
+                            0, 0, 1, 0,
+                            0, 0, 0, 1;
+          if (curTransformation.x != 0) {
+            Vector4f newTriA = tempRotatorX*tempTriA;
+            Vector4f newTriB = tempRotatorX*tempTriB;
+            Vector4f newTriC = tempRotatorX*tempTriC;
+            triangle_array[j].ax = newTriA(0);
+            triangle_array[j].ay = newTriA(1);
+            triangle_array[j].az = newTriA(2);
+            triangle_array[j].bx = newTriB(0);
+            triangle_array[j].by = newTriB(1);
+            triangle_array[j].bz = newTriB(2);
+            triangle_array[j].cx = newTriC(0);
+            triangle_array[j].cy = newTriC(1);
+            triangle_array[j].cz = newTriC(2);
+          }
+          if (curTransformation.y != 0) {
+            Vector4f newTriA = tempRotatorY*tempTriA;
+            Vector4f newTriB = tempRotatorY*tempTriB;
+            Vector4f newTriC = tempRotatorY*tempTriC;
+            triangle_array[j].ax = newTriA(0);
+            triangle_array[j].ay = newTriA(1);
+            triangle_array[j].az = newTriA(2);
+            triangle_array[j].bx = newTriB(0);
+            triangle_array[j].by = newTriB(1);
+            triangle_array[j].bz = newTriB(2);
+            triangle_array[j].cx = newTriC(0);
+            triangle_array[j].cy = newTriC(1);
+            triangle_array[j].cz = newTriC(2);
+          }
+          if (curTransformation.z != 0) {
+            Vector4f newTriA = tempRotatorZ*tempTriA;
+            Vector4f newTriB = tempRotatorZ*tempTriB;
+            Vector4f newTriC = tempRotatorZ*tempTriC;
+            triangle_array[j].ax = newTriA(0);
+            triangle_array[j].ay = newTriA(1);
+            triangle_array[j].az = newTriA(2);
+            triangle_array[j].bx = newTriB(0);
+            triangle_array[j].by = newTriB(1);
+            triangle_array[j].bz = newTriB(2);
+            triangle_array[j].cx = newTriC(0);
+            triangle_array[j].cy = newTriC(1);
+            triangle_array[j].cz = newTriC(2);
+          }                                                    
+        }
+        else if (curTransformation.type == 's') {
+          Matrix4f tempScaler;
+          tempScaler << curTransformation.x, 0, 0, 0,
+                        0, curTransformation.y, 0, 0,
+                        0, 0, curTransformation.z, 0,
+                        0, 0, 0, 1;
+          Vector4f newTriA = tempScaler*tempTriA;
+          Vector4f newTriB = tempScaler*tempTriB;
+          Vector4f newTriC = tempScaler*tempTriC;
+          triangle_array[j].ax = newTriA(0);
+          triangle_array[j].ay = newTriA(1);
+          triangle_array[j].az = newTriA(2);
+          triangle_array[j].bx = newTriB(0);
+          triangle_array[j].by = newTriB(1);
+          triangle_array[j].bz = newTriB(2);
+          triangle_array[j].cx = newTriC(0);
+          triangle_array[j].cy = newTriC(1);
+          triangle_array[j].cz = newTriC(2);
+        }
+        else {
+          printf("Invalid transformation type: %c. Skipping this one...\n",curTransformation.type);
+        }   
+      }
     }
   }
 }
