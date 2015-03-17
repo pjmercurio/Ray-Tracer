@@ -101,24 +101,21 @@ pixel image_buffer[WIDTH][LENGTH];
 
 pixel calculatePhongShading(float x, float y, float z, sphere s) {
 
-  printf("Z: %f\n",z);
+  //float dist = sqrt(sqr(x) + sqr(y));
+
+  //float z = sqrt(s.r*s.r-dist*dist);
 
         Vector3f piece(x, y, z);
         piece.normalize();
-        Vector3f surfaceNormal(x-s.cx, y-s.cy, z-s.cz);
+        Vector3f surfaceNormal(x-s.cx, y-s.cy, z+s.cz);
         surfaceNormal.normalize();
         Vector3f R(0.0, 0.0, 0.0);
 
         for (int p = 0; p < point_light_count; p++) {
           Vector3f lightloc(pl_array[p].x, pl_array[p].y, pl_array[p].z);
           Vector3f lightcolor(pl_array[p].R,pl_array[p].G,pl_array[p].B);
-          //printf("Light stuff: %f %f %f %f %f %f\n",pl_array[p].x, pl_array[p].y, pl_array[p].z,pl_array[p].R,pl_array[p].G,pl_array[p].B);
-          cout << "lightloc before: " << lightloc(0) << " " << lightloc(1) << " " << lightloc(2) << "\n";
-          cout << "piece: " << piece(0) << " " << piece(1) << " " << piece(2) << "\n";
           lightloc = lightloc - piece;
-          cout << "lightloc after: " << lightloc(0) << " " << lightloc(1)  << " " << lightloc(2) << "\n";
           lightloc.normalize();
-          //std::cout << "Light: " << lightloc << "\n";
 
           Vector3f new_ambient(material_array[s.mat_num].kar*lightcolor(0),material_array[s.mat_num].kag*lightcolor(1),material_array[s.mat_num].kab*lightcolor(2));
           R += new_ambient; // Add ambient term for each point light
@@ -133,11 +130,12 @@ pixel calculatePhongShading(float x, float y, float z, sphere s) {
 
           Vector3f rd = (-1 * lightloc) + (2 * lightloc.dot(surfaceNormal) * surfaceNormal);
           rd.normalize();
-          Vector3f v_vec(-x, -y, -z);
+          Vector3f v_vec(-x, -y, z);
           v_vec.normalize();
           float rvec = rd.dot(v_vec);
           rvec = fmax(rvec, 0);
           Vector3f new_specular(material_array[s.mat_num].ksr*lightcolor(0),material_array[s.mat_num].ksg*lightcolor(1),material_array[s.mat_num].ksb*lightcolor(2));
+
 
           R += pow(rvec, material_array[s.mat_num].ksp) * new_specular;
 
@@ -171,9 +169,19 @@ pixel calculatePhongShading(float x, float y, float z, sphere s) {
 
         }
 
+        if (R(0) > 255) {
+            R(0) = 255;
+          }
+        if (R(1) > 255) {
+          R(1) = 255;
+        }
+        if (R(2) > 255) {
+          R(2) = 255;
+        }
+
         struct pixel R1 = {R(0), R(1), R(2)};
 
-        printf("PIXEL R1: %i, %i ,%i\n",R1.R, R1.G, R1.B);
+        //printf("PIXEL R1: %i, %i ,%i\n",R1.R, R1.G, R1.B);
 
         return R1;
 }
@@ -191,12 +199,10 @@ float computeSphereIntersection(sphere s, float x, float y) {
   float discriminant = b*b - 4*a*c;
   //printf("discriminant: %f\n",discriminant);
   if (discriminant <= 0) {
-
     return FLT_MAX;
   }
   else {
-
-    return min((-b + discriminant)/2*a, (-b - discriminant)/2*a);
+    return -min((-b + discriminant)/2*a, (-b - discriminant)/2*a);
   }
 }
 
@@ -264,12 +270,18 @@ pixel lookAtObjects(float x, float y) {
   }
   // First intersection is a sphere, calculate for sphere
   else {
-    //printf("reach");
-    pixel temp = calculatePhongShading(minDist*x, minDist*y, -minDist, nearestSphere);
+    pixel temp = calculatePhongShading(-minDist*x, -minDist*y, minDist, nearestSphere);
     //pixel temp = {255, 255, 255};
-    return temp;
+    /*if (nearestSphere.cz == -3) {
+      pixel temp = {255, 255, 255};
+      return temp;
+    }
+    if (nearestSphere.cz == -20) {
+      pixel temp = {255, 0, 0};
+      return temp;
+    }*/
+      return temp;
   }
-  
 }
 
 
