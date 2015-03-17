@@ -62,6 +62,10 @@ struct directional_light {
 struct material {
   float kar, kag, kab, kdr, kdg, kdb, ksr, ksg, ksb, ksp, krr, krg, krb;
 };
+struct transformation {
+  char type;
+  float x, y, z;
+};
 struct pixel {
   unsigned char R, G, B;
 };
@@ -74,6 +78,7 @@ int directional_light_count = 0;
 int triangle_count = 0;
 int sphere_count = 0;
 int material_count = 0;
+int transformation_count = 0;
 
 Vector3f current_translation(0, 0, 0);
 Vector3f current_rotation(0, 0, 0);
@@ -96,14 +101,11 @@ directional_light dl_array[10];
 triangle triangle_array[10];
 sphere sphere_array[10];
 material material_array[10];
+transformation transformation_array[10];
 
 pixel image_buffer[WIDTH][LENGTH];
 
 pixel calculatePhongShading(float x, float y, float z, sphere s) {
-
-  //float dist = sqrt(sqr(x) + sqr(y));
-
-  //float z = sqrt(s.r*s.r-dist*dist);
 
         Vector3f piece(x, y, z);
         piece.normalize();
@@ -181,8 +183,6 @@ pixel calculatePhongShading(float x, float y, float z, sphere s) {
 
         struct pixel R1 = {R(0), R(1), R(2)};
 
-        //printf("PIXEL R1: %i, %i ,%i\n",R1.R, R1.G, R1.B);
-
         return R1;
 }
 
@@ -235,6 +235,53 @@ float computeTriangleIntersection(triangle t, float x, float y) {
 
 
 //****************************************************
+// Apply transformation to sphere
+//****************************************************
+void transformObjects() {
+  if (transformation_count > 0) {
+    for (int j = 0; j < sphere_count; j++) {
+      Vector4f tempSphere(sphere_array[j].cx, sphere_array[j].cy, sphere_array[j].cz, 1);
+      for (int i = transformation_count - 1; i >= 0; i--) {
+        transformation curTransformation = transformation_array[i];
+        if (curTransformation.type == 't') {
+          Matrix4f tempTranslator;
+          tempTranslator << 1, 0, 0, curTransformation.x,
+                            0, 1, 0, curTransformation.y,
+                            0, 0, 1, curTransformation.z,
+                            0, 0, 0, 1;
+          Vector4f newSphere = tempTranslator*tempSphere;
+          sphere_array[j].cx = newSphere(0);
+          sphere_array[j].cy = newSphere(1);
+          sphere_array[j].cz = newSphere(2);
+        }
+        else if (curTransformation.type == 'r') {
+        // Do Rotation
+        }
+        else if (curTransformation.type == 's') {
+          Matrix4f tempScaler;
+          tempScaler << curTransformation.x, 0, 0, 0,
+                        0, curTransformation.y, 0, 0,
+                        0, 0, curTransformation.z, 0,
+                        0, 0, 0, 1;
+          Vector4f newSphere = tempScaler*tempSphere;
+          sphere_array[j].cx = newSphere(0);
+          sphere_array[j].cy = newSphere(1);
+          sphere_array[j].cz = newSphere(2);
+        }
+        else {
+          printf("Invalid transformation type: %c. Skipping this one...\n",curTransformation.type);
+        }   
+      }
+    }
+
+    for (int p = 0; p < triangle_count; p++) {
+
+    }
+  }
+}
+
+
+//****************************************************
 // Iterate thru all objects in scene and return object w/ closest intersection
 //****************************************************
 pixel lookAtObjects(float x, float y) {
@@ -271,16 +318,7 @@ pixel lookAtObjects(float x, float y) {
   // First intersection is a sphere, calculate for sphere
   else {
     pixel temp = calculatePhongShading(-minDist*x, -minDist*y, minDist, nearestSphere);
-    //pixel temp = {255, 255, 255};
-    /*if (nearestSphere.cz == -3) {
-      pixel temp = {255, 255, 255};
-      return temp;
-    }
-    if (nearestSphere.cz == -20) {
-      pixel temp = {255, 0, 0};
-      return temp;
-    }*/
-      return temp;
+    return temp;
   }
 }
 
@@ -445,11 +483,38 @@ void parseInput(int argc, char *argv[]) {
       i += 2;
     }
     else if (strcmp(argv[i], "xft") == 0) {
-      ambient_light temp;
-      temp.R = atof(argv[i+1]);
-      temp.G = atof(argv[i+2]);
-      temp.B = atof(argv[i+3]);
-      i += 2;
+      transformation temp;
+      temp.type = 't';
+      temp.x = atof(argv[i+1]);
+      temp.y = atof(argv[i+2]);
+      temp.z = atof(argv[i+3]);
+      transformation_array[transformation_count] = temp;
+      transformation_count += 1;
+      i += 4;
+    }
+    else if (strcmp(argv[i], "xfr") == 0) {
+      transformation temp;
+      temp.type = 'r';
+      temp.x = atof(argv[i+1]);
+      temp.y = atof(argv[i+2]);
+      temp.z = atof(argv[i+3]);
+      transformation_array[transformation_count] = temp;
+      transformation_count += 1;
+      i += 4;
+    }
+    else if (strcmp(argv[i], "xfs") == 0) {
+      transformation temp;
+      temp.type = 's';
+      temp.x = atof(argv[i+1]);
+      temp.y = atof(argv[i+2]);
+      temp.z = atof(argv[i+3]);
+      transformation_array[transformation_count] = temp;
+      transformation_count += 1;
+      i += 4;
+    }
+    else if (strcmp(argv[i], "xfz") == 0) {
+      transformation_count = 0;
+      i += 1;
     }
     else {
       printf("ERROR! Unknown argument '%s'\n",argv[i]);
@@ -482,6 +547,7 @@ void drawImage() {
 int main(int argc, char *argv[]) {
   srand(time(NULL));
   parseInput(argc, argv);
+  transformObjects();
   drawImage();
   printf("Window closed, program terminated.\n");
   return 0;
