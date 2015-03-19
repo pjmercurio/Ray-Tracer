@@ -1,6 +1,7 @@
 
 #include <vector>
 #include <iostream>
+#include <string>
 #include <fstream>
 #include <cmath>
 #include <cfloat>
@@ -26,6 +27,7 @@ using namespace cimg_library;
 
 #define LENGTH 1000
 #define WIDTH 1000
+#define RECURSION_DEPTH 0
 #define PI 3.14159265  // Should be used from mathlib
 inline float sqr(float x) { return x*x; }
 
@@ -37,6 +39,8 @@ inline float sqr(float x) { return x*x; }
 
 // Initialize the CImg file with its dimensions and color
 CImg<unsigned char> main_image(WIDTH, LENGTH, 1, 3, 0);
+
+char *imageName;
 
 struct camera {
   float ex, ey, ez, llx, lly, llz, lrx, lry, lrz, ulx, uly, ulz, urx, ury, urz;
@@ -105,13 +109,12 @@ transformation transformation_array[10];
 
 pixel image_buffer[WIDTH][LENGTH];
 
-pixel calculatePhongShading(float x, float y, float z, sphere s) {
+pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int depth) {
 
         Vector3f piece(x, y, z);
         piece.normalize();
         Vector3f surfaceNormal(x-s.cx, y-s.cy, z+s.cz);
         surfaceNormal.normalize();
-        Vector3f R(0.0, 0.0, 0.0);
 
         for (int p = 0; p < point_light_count; p++) {
           Vector3f lightloc(pl_array[p].x, pl_array[p].y, pl_array[p].z);
@@ -140,6 +143,13 @@ pixel calculatePhongShading(float x, float y, float z, sphere s) {
 
 
           R += pow(rvec, material_array[s.mat_num].ksp) * new_specular;
+
+          if (material_array[s.mat_num].krr > 0 && depth > 0) {
+            Vector3f V(x, y, z);
+            Vector3f R1 = -V + 2*surfaceNormal*(V.dot(surfaceNormal));
+            Vector3f F_vec = R1+V;
+            return calculatePhongShading(F_vec(0), F_vec(1), F_vec(2), R, s, depth-1);
+          }
 
         }
 
@@ -423,7 +433,8 @@ pixel lookAtObjects(float x, float y) {
   }
   // First intersection is a sphere, calculate for sphere
   else {
-    pixel temp = calculatePhongShading(-minDist*x, -minDist*y, minDist, nearestSphere);
+    Vector3f R(0.0, 0.0, 0.0);
+    pixel temp = calculatePhongShading(-minDist*x, -minDist*y, minDist, R, nearestSphere, RECURSION_DEPTH);
     return temp;
   }
 }
@@ -622,6 +633,17 @@ void parseInput(int argc, char *argv[]) {
       transformation_count = 0;
       i += 1;
     }
+    else if (strcmp(argv[i], "filename") == 0) {
+      int len = strlen(argv[i+1]);
+      printf("LEN: %i\n",len);
+      imageName = new char[len+4];
+      strncpy(imageName, argv[i+1], len);
+      imageName[len] = '.';
+      imageName[len+1] = 'b';
+      imageName[len+2] = 'm';
+      imageName[len+3] = 'p';
+      i += 2;
+    }
     else {
       printf("ERROR! Unknown argument '%s'\n",argv[i]);
       i += 1000;
@@ -655,6 +677,7 @@ int main(int argc, char *argv[]) {
   parseInput(argc, argv);
   transformObjects();
   drawImage();
+  main_image.save("Image.bmp");
   printf("Window closed, program terminated.\n");
   return 0;
 }
