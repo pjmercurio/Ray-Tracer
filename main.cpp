@@ -42,6 +42,10 @@ CImg<unsigned char> main_image(WIDTH, LENGTH, 1, 3, 0);
 
 char *imageName;
 
+struct ray {
+    Vector3f origin, distance;
+    void normalize(){distance.normalize();}
+};
 struct camera {
   float ex, ey, ez, llx, lly, llz, lrx, lry, lrz, ulx, uly, ulz, urx, ury, urz;
 };
@@ -118,12 +122,25 @@ pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int
 
         for (int p = 0; p < point_light_count; p++) {
           Vector3f lightloc(pl_array[p].x, pl_array[p].y, pl_array[p].z);
-          Vector3f lightcolor(pl_array[p].R,pl_array[p].G,pl_array[p].B);
+          ray lightray;
+          lightray.origin = lightloc;
+          lightray.distance = lightloc - Vector3f(x, y, z);
+          float dist = sqrt(distance(0)*distance(0) + distance(1)*distance(1) + distance(2)*distance(2));
+          float dist_squared = dist * dist;
+          if(!pl_array[p].falloff)
+              Vector3f lightcolor(pl_array[p].R,pl_array[p].G,pl_array[p].B);
+          else if(pl_array[p].falloff == 1)
+              Vector3f lightcolor(pl_array[p].R/dist,pl_array[p].G/dist,pl_array[p].B/dist);
+          else
+              Vector3f lightcolor(pl_array[p].R/dist_squared,pl_array[p].G/dist_squared,pl_array[p].B/dist_squared);
+
           lightloc = lightloc - piece;
           lightloc.normalize();
 
           Vector3f new_ambient(material_array[s.mat_num].kar*lightcolor(0),material_array[s.mat_num].kag*lightcolor(1),material_array[s.mat_num].kab*lightcolor(2));
           R += new_ambient; // Add ambient term for each point light
+          if(occluded_pl(x, y, z, lightray))
+              continue;
 
           float d = lightloc.dot(surfaceNormal);
           float color = fmax(d, 0);
@@ -196,7 +213,29 @@ pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int
         return R1;
 }
 
+// TODO: Add triangle and polygon checks
+bool occluded_pl(float x, float y, float z, ray lightray){
+    int num_intersected_objects = 0;
+    for (int s_index = 0; s_index < sphere_array.length; s_index++)
+        if (computeSphereIntersection(sphere_array[s_index], lightray) >= 0)
+                num_intersected_objects++;
+    reutrn num_intersected_objects > 1;
+}
 
+//****************************************************
+// Helpers for lookAtObjects method
+//****************************************************
+float computeSphereIntersection(sphere s, ray r) {
+  float a = 1, dist_x = r.origin.x - s.cx, dist_y = r.origin.y - s.cy, dist_z = r.origin.z - s.cz;
+  float b = 2.0 * r.distance.x * dist_x + 2.0 * r.distance.y * dist_y + 2.0 * r.distance.z * dist_z;
+  float c = dist_x * dist_x + dist_y * dist_y + dist_z * dist_z - s.r * s.r;
+  float discriminant = b*b - 4*c;
+  
+  if (discriminant <= 0)
+    return -1;
+  else
+    return -min((-b + discriminant)/2*a, (-b - discriminant)/2*a);
+}
 
 //****************************************************
 // Helpers for lookAtObjects method
@@ -242,6 +281,9 @@ float computeTriangleIntersection(triangle t, float x, float y) {
     }
   return FLT_MAX;
 }
+
+
+
 
 
 //****************************************************
