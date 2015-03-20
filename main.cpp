@@ -196,6 +196,93 @@ pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int
         return R1;
 }
 
+pixel calculateTrianglePhongShading(float x, float y, float z, Vector3f R, triangle t, int depth) {
+
+        Vector3f piece(x, y, z);
+        piece.normalize();
+        Vector3f surfaceNormal(-x, -y, z);
+        surfaceNormal.normalize();
+
+        for (int p = 0; p < point_light_count; p++) {
+          Vector3f lightloc(pl_array[p].x, pl_array[p].y, pl_array[p].z);
+          Vector3f lightcolor(pl_array[p].R,pl_array[p].G,pl_array[p].B);
+          lightloc = lightloc - piece;
+          lightloc.normalize();
+
+          Vector3f new_ambient(material_array[t.mat_num].kar*lightcolor(0),material_array[t.mat_num].kag*lightcolor(1),material_array[t.mat_num].kab*lightcolor(2));
+          R += new_ambient; // Add ambient term for each point light
+
+          float d = lightloc.dot(surfaceNormal);
+          float color = fmax(d, 0);
+          color *= d;
+
+          Vector3f new_diffuse(material_array[t.mat_num].kdr*lightcolor(0),material_array[t.mat_num].kdg*lightcolor(1),material_array[t.mat_num].kdb*lightcolor(2));
+
+          R += color * new_diffuse;
+
+          Vector3f rd = (-1 * lightloc) + (2 * lightloc.dot(surfaceNormal) * surfaceNormal);
+          rd.normalize();
+          Vector3f v_vec(-x, -y, z);
+          v_vec.normalize();
+          float rvec = rd.dot(v_vec);
+          rvec = fmax(rvec, 0);
+          Vector3f new_specular(material_array[t.mat_num].ksr*lightcolor(0),material_array[t.mat_num].ksg*lightcolor(1),material_array[t.mat_num].ksb*lightcolor(2));
+
+
+          R += pow(rvec, material_array[t.mat_num].ksp) * new_specular;
+
+          if (material_array[t.mat_num].krr > 0 && depth > 0) {
+            Vector3f V(x, y, z);
+            Vector3f R1 = -V + 2*surfaceNormal*(V.dot(surfaceNormal));
+            Vector3f F_vec = R1+V;
+            return calculateTrianglePhongShading(F_vec(0), F_vec(1), F_vec(2), R, t, depth-1);
+          }
+
+        }
+
+        for (int p = 0; p < directional_light_count; p++) {
+          Vector3f lightloc(dl_array[p].x, dl_array[p].y, dl_array[p].z);
+          Vector3f lightcolor(dl_array[p].R,dl_array[p].G,dl_array[p].B);
+          lightloc = -1*lightloc;
+          lightloc.normalize();
+
+          Vector3f new_ambient(material_array[t.mat_num].kar*lightcolor(0),material_array[t.mat_num].kag*lightcolor(1),material_array[t.mat_num].kab*lightcolor(2));
+          R += new_ambient; // Add ambient term for each point light
+
+          float d = lightloc.dot(surfaceNormal);
+          float color = fmax(d, 0);
+          color *= d;
+
+          Vector3f new_diffuse(material_array[t.mat_num].kdr*lightcolor(0),material_array[t.mat_num].kdg*lightcolor(1),material_array[t.mat_num].kdb*lightcolor(2));
+
+          R += color * new_diffuse;
+
+          Vector3f rd = (-1 * lightloc) + (2 * lightloc.dot(surfaceNormal) * surfaceNormal);
+          rd.normalize();
+          Vector3f v_vec(-x, -y, -z);
+          v_vec.normalize();
+          float rvec = rd.dot(v_vec);
+          Vector3f new_specular(material_array[t.mat_num].ksr*lightcolor(0),material_array[t.mat_num].ksg*lightcolor(1),material_array[t.mat_num].ksb*lightcolor(2));
+
+          R += pow(rvec, material_array[t.mat_num].ksp) * new_specular;
+
+        }
+
+        if (R(0) > 255) {
+            R(0) = 255;
+          }
+        if (R(1) > 255) {
+          R(1) = 255;
+        }
+        if (R(2) > 255) {
+          R(2) = 255;
+        }
+
+        struct pixel R1 = {R(0), R(1), R(2)};
+
+        return R1;
+}
+
 
 
 //****************************************************
@@ -428,7 +515,9 @@ pixel lookAtObjects(float x, float y) {
   }
   // First intersection is a triangle, calculate for triangle
   else if (isTriangle == true) {
-    pixel temp = {255, 255, 255};
+    Vector3f R(0.0, 0.0, 0.0);
+    pixel temp = calculateTrianglePhongShading(-minDist*x, -minDist*y, minDist, R, nearestTriangle, RECURSION_DEPTH);
+    //pixel temp = {255, 255, 255};
     return temp;
   }
   // First intersection is a sphere, calculate for sphere
