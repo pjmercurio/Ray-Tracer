@@ -133,7 +133,7 @@ float computeSphereIntersection(sphere s, ray r) {
   if (discriminant <= 0)
     return -1;
   else
-    return min((-b + sqrt(discriminant))/2*a, (-b - sqrt(discriminant))/2*a);
+    return min((-b + sqrt(discriminant))/(2*a), (-b - sqrt(discriminant))/(2*a));
 }
 
 float computeTriangleIntersection(triangle tri, ray lightray)
@@ -223,12 +223,9 @@ pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int
         distance.normalize();
         
         Vector3f new_ambient(material_array[s.mat_num].kar*lightcolor(0),material_array[s.mat_num].kag*lightcolor(1),material_array[s.mat_num].kab*lightcolor(2));
-        if(occluded_pl(x, y, z, lightray)){
-            printf("Shadow at %f %f %f\n", x, y, z);
-            R += new_ambient * 0.2;
+        R += new_ambient
+        if(occluded_pl(x, y, z, lightray))
             continue;
-        }
-        R += new_ambient; // Add ambient term for each point light
         
         float d = distance.dot(surfaceNormal);
         float color = fmax(d, 0);
@@ -326,14 +323,10 @@ pixel calculateTrianglePhongShading(float x, float y, float z, Vector3f R, trian
           distance.normalize();
 
           Vector3f new_ambient(material_array[t.mat_num].kar*lightcolor(0),material_array[t.mat_num].kag*lightcolor(1),material_array[t.mat_num].kab*lightcolor(2));
-          
+          R += new_ambient
 
-            if(occluded_pl(x, y, z, lightray)){
-                printf("Shadow at %f %f %f\n", x, y, z);
-                R += new_ambient * 0.2;
+            if(occluded_pl(x, y, z, lightray))
                 continue;
-            }
-            R += new_ambient; // Add ambient term for each point light
             
           float d = distance.dot(surfaceNormal);
           float color = fmax(d, 0);
