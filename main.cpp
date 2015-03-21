@@ -25,7 +25,7 @@ using namespace std;
 using namespace cimg_library;
 
 
-#define LENGTH 1000
+#define HEIGHT 1000
 #define WIDTH 1000
 #define RECURSION_DEPTH 0
 #define EPSILON 0.000001    //Used when determining triangle-ray intersections
@@ -39,7 +39,7 @@ inline float sqr(float x) { return x*x; }
 
 
 // Initialize the CImg file with its dimensions and color
-CImg<unsigned char> main_image(WIDTH, LENGTH, 1, 3, 0);
+CImg<unsigned char> main_image(WIDTH, HEIGHT, 1, 3, 0);
 
 char *imageName;
 
@@ -56,10 +56,13 @@ struct sphere {
 };
 struct triangle {
     float ax, ay, az, bx, by, bz, cx, cy, cz;
+    bool computedNormal = false;
+    Vector3f normal;
     int mat_num;
     Vector3f getV1(){ return Vector3f(ax, ay, az);}
     Vector3f getV2(){ return Vector3f(bx, by, bz);}
     Vector3f getV3(){ return Vector3f(cx, cy, cz);}
+    Vector3f getNormal(){ if(computedNormal) return normal; else { normal = (getV2() - getV1()).cross(getV3() - getV1()); return normal;}}
 };
 struct ambient_light {
   float R, G, B;
@@ -115,22 +118,22 @@ sphere sphere_array[10];
 material material_array[10];
 transformation transformation_array[10];
 
-pixel image_buffer[WIDTH][LENGTH];
+pixel image_buffer[WIDTH][HEIGHT];
 
 //*************************************************************//
 // Intersection methods for checking intersections with *rays* //
 //*************************************************************//
 
 float computeSphereIntersection(sphere s, ray r) {
-  float a = 1, dist_x = r.origin(0) - s.cx, dist_y = r.origin(1) - s.cy, dist_z = r.origin(2) - s.cz;
+  float a = r.distance.dot(r.distance), dist_x = r.origin(0) - s.cx, dist_y = r.origin(1) - s.cy, dist_z = r.origin(2) - s.cz;
   float b = 2.0 * r.distance(0) * dist_x + 2.0 * r.distance(1) * dist_y + 2.0 * r.distance(2) * dist_z;
   float c = dist_x * dist_x + dist_y * dist_y + dist_z * dist_z - s.r * s.r;
-  float discriminant = b*b - 4*c;
+  float discriminant = b*b - 4*c*a;
   
   if (discriminant <= 0)
     return -1;
   else
-    return -min((-b + discriminant)/2*a, (-b - discriminant)/2*a);
+    return min((-b + sqrt(discriminant))/2*a, (-b - sqrt(discriminant))/2*a);
 }
 
 float computeTriangleIntersection(triangle tri, ray lightray)
@@ -159,7 +162,7 @@ float computeTriangleIntersection(triangle tri, ray lightray)
     //Calculate u parameter and test bound
     u = T.dot(P) / det;
     //The intersection lies outside of the triangle
-    if(u < 0.f || u > 1.f) return 0;
+    if(u < 0.f || u > 1.f) return -1;
     
     //Prepare to test v parameter
     Q = T.cross(e1);
@@ -181,13 +184,16 @@ float computeTriangleIntersection(triangle tri, ray lightray)
 // TODO: Add polygon checks
 bool occluded_pl(float x, float y, float z, ray lightray){
     int num_intersected_objects = 0;
-    for (int s_index = 0; s_index < sphere_count; s_index++)
-        if (computeSphereIntersection(sphere_array[s_index], lightray) >= 0)
+    for (int s_index = 0; s_index < sphere_count; s_index++) {
+        float t_intersect = computeSphereIntersection(sphere_array[s_index], lightray);
+        if (t_intersect >= 0 && t_intersect <= 1)
             num_intersected_objects++;
-    for (int t_index = 0; t_index < triangle_count; t_index++)
-        if (computeTriangleIntersection(triangle_array[t_index], lightray) >= 0)
+    }
+    for (int t_index = 0; t_index < triangle_count; t_index++) {
+        float t_intersect = computeTriangleIntersection(triangle_array[t_index], lightray);
+        if (t_intersect >= 0 && t_intersect <= 1)
             num_intersected_objects++;
-    printf('%d', num_intersected_objects);
+    }
     
     return num_intersected_objects > 1;
 }
@@ -195,8 +201,7 @@ bool occluded_pl(float x, float y, float z, ray lightray){
 pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int depth) {
     
     Vector3f piece(x, y, z);
-    piece.normalize();
-    Vector3f surfaceNormal(x-s.cx, y-s.cy, z+s.cz);
+    Vector3f surfaceNormal(x-s.cx, y-s.cy, z-s.cz);
     surfaceNormal.normalize();
     
     for (int p = 0; p < point_light_count; p++) {
@@ -204,8 +209,8 @@ pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int
         Vector3f lightcolor;
         ray lightray;
         lightray.origin = lightloc;
-        Vector3f distance = lightloc - Vector3f(x, y, z);
-        lightray.distance = distance;
+        Vector3f distance = lightloc - piece;
+        lightray.distance = piece - lightloc;
         float dist = sqrt(distance(0)*distance(0) + distance(1)*distance(1) + distance(2)*distance(2));
         float dist_squared = dist * dist;
         if(!pl_array[p].falloff)
@@ -215,16 +220,17 @@ pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int
         else
             lightcolor = Vector3f(pl_array[p].R/dist_squared,pl_array[p].G/dist_squared,pl_array[p].B/dist_squared);
         
-        lightloc = lightloc - piece;
-        lightloc.normalize();
+        distance.normalize();
         
         Vector3f new_ambient(material_array[s.mat_num].kar*lightcolor(0),material_array[s.mat_num].kag*lightcolor(1),material_array[s.mat_num].kab*lightcolor(2));
+        if(occluded_pl(x, y, z, lightray)){
+            printf("Shadow at %f %f %f\n", x, y, z);
+            R += new_ambient * 0.2;
+            continue;
+        }
         R += new_ambient; // Add ambient term for each point light
         
-        if(occluded_pl(x, y, z, lightray))
-            continue;
-        
-        float d = lightloc.dot(surfaceNormal);
+        float d = distance.dot(surfaceNormal);
         float color = fmax(d, 0);
         color *= d;
         
@@ -232,9 +238,9 @@ pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int
         
         R += color * new_diffuse;
         
-        Vector3f rd = (-1 * lightloc) + (2 * lightloc.dot(surfaceNormal) * surfaceNormal);
+        Vector3f rd = (-1 * distance) + (2 * distance.dot(surfaceNormal) * surfaceNormal);
         rd.normalize();
-        Vector3f v_vec(-x, -y, z);
+        Vector3f v_vec(-x, -y, -z);
         v_vec.normalize();
         float rvec = rd.dot(v_vec);
         rvec = fmax(rvec, 0);
@@ -253,15 +259,16 @@ pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int
     }
     
     for (int p = 0; p < directional_light_count; p++) {
-        Vector3f lightloc(dl_array[p].x, dl_array[p].y, dl_array[p].z);
+        Vector3f lightdirection(dl_array[p].x, dl_array[p].y, dl_array[p].z);
         Vector3f lightcolor(dl_array[p].R,dl_array[p].G,dl_array[p].B);
-        lightloc = -1*lightloc;
-        lightloc.normalize();
+        lightdirection.normalize();
         
         Vector3f new_ambient(material_array[s.mat_num].kar*lightcolor(0),material_array[s.mat_num].kag*lightcolor(1),material_array[s.mat_num].kab*lightcolor(2));
         R += new_ambient; // Add ambient term for each point light
         
-        float d = lightloc.dot(surfaceNormal);
+        //TODO: Account for directional lights - compute a new origin for the light that follows the specified direction and hits the object
+        
+        float d = lightdirection.dot(surfaceNormal);
         float color = fmax(d, 0);
         color *= d;
         
@@ -269,7 +276,7 @@ pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int
         
         R += color * new_diffuse;
         
-        Vector3f rd = (-1 * lightloc) + (2 * lightloc.dot(surfaceNormal) * surfaceNormal);
+        Vector3f rd = (-1 * lightdirection) + (2 * lightdirection.dot(surfaceNormal) * surfaceNormal);
         rd.normalize();
         Vector3f v_vec(-x, -y, -z);
         v_vec.normalize();
@@ -298,9 +305,7 @@ pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int
 pixel calculateTrianglePhongShading(float x, float y, float z, Vector3f R, triangle t, int depth) {
 
         Vector3f piece(x, y, z);
-        piece.normalize();
-        Vector3f surfaceNormal(-x, -y, z);
-        surfaceNormal.normalize();
+        Vector3f surfaceNormal = t.getNormal();
 
         for (int p = 0; p < point_light_count; p++) {
           
@@ -308,8 +313,8 @@ pixel calculateTrianglePhongShading(float x, float y, float z, Vector3f R, trian
             Vector3f lightcolor;
             ray lightray;
             lightray.origin = lightloc;
-            Vector3f distance = lightloc - Vector3f(x, y, z);
-            lightray.distance = distance;
+            Vector3f distance = lightloc - piece;
+            lightray.distance = piece - lightloc;
             float dist = sqrt(distance(0)*distance(0) + distance(1)*distance(1) + distance(2)*distance(2));
             float dist_squared = dist * dist;
             if(!pl_array[p].falloff)
@@ -318,15 +323,19 @@ pixel calculateTrianglePhongShading(float x, float y, float z, Vector3f R, trian
                 lightcolor = Vector3f(pl_array[p].R/dist,pl_array[p].G/dist,pl_array[p].B/dist);
             else
                 lightcolor = Vector3f(pl_array[p].R/dist_squared,pl_array[p].G/dist_squared,pl_array[p].B/dist_squared);
-            lightloc = lightloc - piece;
-          lightloc.normalize();
+          distance.normalize();
 
           Vector3f new_ambient(material_array[t.mat_num].kar*lightcolor(0),material_array[t.mat_num].kag*lightcolor(1),material_array[t.mat_num].kab*lightcolor(2));
-          R += new_ambient; // Add ambient term for each point light
+          
 
-          if(occluded_pl(x, y, z, lightray))
-              continue;
-          float d = lightloc.dot(surfaceNormal);
+            if(occluded_pl(x, y, z, lightray)){
+                printf("Shadow at %f %f %f\n", x, y, z);
+                R += new_ambient * 0.2;
+                continue;
+            }
+            R += new_ambient; // Add ambient term for each point light
+            
+          float d = distance.dot(surfaceNormal);
           float color = fmax(d, 0);
           color *= d;
 
@@ -334,9 +343,9 @@ pixel calculateTrianglePhongShading(float x, float y, float z, Vector3f R, trian
 
           R += color * new_diffuse;
 
-          Vector3f rd = (-1 * lightloc) + (2 * lightloc.dot(surfaceNormal) * surfaceNormal);
+          Vector3f rd = (-1 * distance) + (2 * distance.dot(surfaceNormal) * surfaceNormal);
           rd.normalize();
-          Vector3f v_vec(-x, -y, z);
+          Vector3f v_vec(-x, -y, -z);
           v_vec.normalize();
           float rvec = rd.dot(v_vec);
           rvec = fmax(rvec, 0);
@@ -355,15 +364,14 @@ pixel calculateTrianglePhongShading(float x, float y, float z, Vector3f R, trian
         }
 
         for (int p = 0; p < directional_light_count; p++) {
-          Vector3f lightloc(dl_array[p].x, dl_array[p].y, dl_array[p].z);
+          Vector3f lightdirection(dl_array[p].x, dl_array[p].y, dl_array[p].z);
           Vector3f lightcolor(dl_array[p].R,dl_array[p].G,dl_array[p].B);
-          lightloc = -1*lightloc;
-          lightloc.normalize();
+          lightdirection.normalize();
 
           Vector3f new_ambient(material_array[t.mat_num].kar*lightcolor(0),material_array[t.mat_num].kag*lightcolor(1),material_array[t.mat_num].kab*lightcolor(2));
           R += new_ambient; // Add ambient term for each point light
 
-          float d = lightloc.dot(surfaceNormal);
+          float d = lightdirection.dot(surfaceNormal);
           float color = fmax(d, 0);
           color *= d;
 
@@ -371,7 +379,7 @@ pixel calculateTrianglePhongShading(float x, float y, float z, Vector3f R, trian
 
           R += color * new_diffuse;
 
-          Vector3f rd = (-1 * lightloc) + (2 * lightloc.dot(surfaceNormal) * surfaceNormal);
+          Vector3f rd = (-1 * lightdirection) + (2 * lightdirection.dot(surfaceNormal) * surfaceNormal);
           rd.normalize();
           Vector3f v_vec(-x, -y, -z);
           v_vec.normalize();
@@ -402,7 +410,7 @@ pixel calculateTrianglePhongShading(float x, float y, float z, Vector3f R, trian
 //****************************************************
 float computeSphereIntersection(sphere s, float x, float y) {
   float a = ((x*x)*1.0 + (y*y)*1.0 + 1.0);
-  float b = -2.0*x*s.cx - 2.0*y*s.cy - 2.0*s.cz;
+  float b = -2.0*x*s.cx - 2.0*y*s.cy + 2.0*s.cz;
   float c = s.cx*s.cx + s.cy*s.cy + s.cz*s.cz - s.r*s.r;
 
   float discriminant = b*b - 4*a*c;
@@ -411,7 +419,7 @@ float computeSphereIntersection(sphere s, float x, float y) {
     return FLT_MAX;
   }
   else {
-    return -min((-b + discriminant)/2*a, (-b - discriminant)/2*a);
+    return min((-b + sqrt(discriminant))/2*a, (-b - sqrt(discriminant))/2*a);
   }
 }
 
@@ -429,9 +437,9 @@ float computeTriangleIntersection(triangle t, float x, float y) {
   }
 
   b << -t.ax, -t.ay, -t.az;
-  A << x, t.bx - t.ax, t.cx - t.ax,
-         y, t.by - t.ay, t.cy - t.ay,
-         1, t.bz - t.az, t.cz - t.az;
+  A << -x, v1(0), v2(0),
+         -y, v1(1), v2(1),
+         1, v1(2), v2(2);
 
   Vector3f x_vector = A.colPivHouseholderQr().solve(b);
   
@@ -603,42 +611,43 @@ void transformObjects() {
 // Iterate thru all objects in scene and return object w/ closest intersection
 //****************************************************
 pixel lookAtObjects(float x, float y) {
-  float minDist = FLT_MAX;
+  float t_intersect = FLT_MAX;
   bool isTriangle = false;
   triangle nearestTriangle;
   sphere nearestSphere;
   for (int i = 0; i < sphere_count; i++) {
     float temp = computeSphereIntersection(sphere_array[i], x, y);
-    if (temp < minDist) {
-      minDist = temp;
+    if (temp < t_intersect) {
+      t_intersect = temp;
       nearestSphere = sphere_array[i];
     }
   }
   for (int p = 0; p < triangle_count; p++) {
     float temp = computeTriangleIntersection(triangle_array[p], x, y);
-    if (temp < minDist) {
-      minDist = temp;
+    if (temp < t_intersect) {
+      t_intersect = temp;
       nearestTriangle = triangle_array[p];
       isTriangle = true;
     }
   }
 
   // No intersection, paint black pixel
-  if (minDist == FLT_MAX) {
+  if (t_intersect == FLT_MAX) {
     pixel temp = {0, 0, 0};
     return temp;
   }
   // First intersection is a triangle, calculate for triangle
   else if (isTriangle == true) {
     Vector3f R(0.0, 0.0, 0.0);
-    pixel temp = calculateTrianglePhongShading(-minDist*x, -minDist*y, minDist, R, nearestTriangle, RECURSION_DEPTH);
+      //printf("Coords in triangle %f, %f, %f\n", t_intersect*x, t_intersect*y, -t_intersect);
+    pixel temp = calculateTrianglePhongShading(t_intersect*x, t_intersect*y, -t_intersect, R, nearestTriangle, RECURSION_DEPTH);
     //pixel temp = {255, 255, 255};
     return temp;
   }
   // First intersection is a sphere, calculate for sphere
   else {
     Vector3f R(0.0, 0.0, 0.0);
-    pixel temp = calculatePhongShading(-minDist*x, -minDist*y, minDist, R, nearestSphere, RECURSION_DEPTH);
+    pixel temp = calculatePhongShading(t_intersect*x, t_intersect*y, -t_intersect, R, nearestSphere, RECURSION_DEPTH);
     return temp;
   }
 }
@@ -649,7 +658,7 @@ pixel lookAtObjects(float x, float y) {
 // Trace a ray through pixel at (x, y)
 //****************************************************
 pixel traceRay(int x, int y) {
-  float x1 = 1.0 - ((2.0*x)/1000.0);
+  float x1 = -1.0 + ((2.0*x)/1000.0);
   float y1 = -1.0 + ((2.0*y)/1000.0);
   pixel temp = lookAtObjects(x1, y1);
   return(temp);
@@ -661,11 +670,11 @@ pixel traceRay(int x, int y) {
 //****************************************************
 void fillBuffer() {
   for (int i = 0; i < WIDTH; i++) {
-    for (int j = 0; j < LENGTH; j++){
+    for (int j = 0; j < HEIGHT; j++){
         pixel temp = traceRay(i, j);
-        image_buffer[i][j].R = temp.R;
-        image_buffer[i][j].G = temp.G;
-        image_buffer[i][j].B = temp.B;
+        image_buffer[i][HEIGHT-j-1].R = temp.R;
+        image_buffer[i][HEIGHT-j-1].G = temp.G;
+        image_buffer[i][HEIGHT-j-1].B = temp.B;
     }
   }  
 }
@@ -861,7 +870,7 @@ void parseInput(int argc, char *argv[]) {
 void drawImage() {
   fillBuffer();
   for (int i = 0; i < WIDTH; i++) {
-    for (int j = 0; j < LENGTH; j++){
+    for (int j = 0; j < HEIGHT; j++){
       main_image(i, j, 0) = image_buffer[i][j].R;
       main_image(i, j, 1) = image_buffer[i][j].G;
       main_image(i, j, 2) = image_buffer[i][j].B;
