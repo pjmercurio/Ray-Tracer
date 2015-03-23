@@ -13,7 +13,7 @@ main: main.o
 example_01.o: example_01.cpp
 	$(CC) $(CFLAGS) -c main.cpp -o main.o
 clean: 
-	$(RM) *.o as2
+	$(RM) *.o *.bmp *.out as2
  
 
 

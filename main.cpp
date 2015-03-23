@@ -5,6 +5,7 @@
 #include <fstream>
 #include <cmath>
 #include <cfloat>
+#include <sstream>
 #include <stdlib.h>
 #include <stdio.h>
 #include "Eigen/Dense"
@@ -27,9 +28,8 @@ using namespace cimg_library;
 
 #define HEIGHT 1000
 #define WIDTH 1000
-#define RECURSION_DEPTH 1
+#define RECURSION_DEPTH 2
 #define EPSILON 0.000001    //Used when determining triangle-ray intersections
-#define PI 3.14159265  // Should be used from mathlib
 inline float sqr(float x) { return x*x; }
 
 
@@ -66,6 +66,7 @@ struct triangle {
     Vector3f getV3(){ return Vector3f(cx, cy, cz);}
     Vector3f getNormal(){ if(computedNormal) return normal; else { normal = (getV3() - getV1()).cross(getV2() - getV1()); return normal;}}
     bool equals(triangle other){ return getV1() == other.getV1() && getV2() == other.getV2() && getV3() == other.getV3();}
+    void print(){printf("A: %f, %f, %f   B: %f, %f, %f   C: %f, %f, %f", ax, ay, az, bx, by, bz, cx, cy, cz);}
 };
 struct ambient_light {
     float R, G, B;
@@ -126,6 +127,7 @@ transformation transformation_array[10];
 sphere piece_sphere;
 triangle piece_tri;
 pixel image_buffer[WIDTH][HEIGHT];
+string image_name_str = "image";
 
 //*************************************************************//
 // Intersection methods for checking intersections with *rays* //
@@ -137,7 +139,7 @@ float computeSphereIntersection(sphere s, ray r) {
     float c = dist_x * dist_x + dist_y * dist_y + dist_z * dist_z - s.r * s.r;
     float discriminant = b*b - 4*c*a;
     
-    if (discriminant <= 0)
+    if (discriminant < 0)
         return -1;
     else
         return min((-b + sqrt(discriminant))/(2*a), (-b - sqrt(discriminant))/(2*a));
@@ -146,6 +148,7 @@ float computeSphereIntersection(sphere s, ray r) {
 float computeTriangleIntersection(triangle tri, ray lightray)
 {
     Vector3f V1 = tri.getV1(), V2 = tri.getV2(), V3 = tri.getV3(), origin = lightray.origin, distance = lightray.distance;
+    distance.normalize();
     Vector3f e1, e2;  //Edge1, Edge2
     Vector3f P, Q, T;
     float det, u, v;
@@ -280,7 +283,6 @@ pixel calculatePhongShading(float x, float y, float z, Vector3f R, sphere s, int
             R(0) += applied_reflection_color(0);
             R(1) += applied_reflection_color(1);
             R(2) += applied_reflection_color(2);
-            //printf("%f %f %f\n", applied_reflection_color(0), applied_reflection_color(1), applied_reflection_color(2));
         }
     }
     
@@ -394,7 +396,6 @@ pixel calculateTrianglePhongShading(float x, float y, float z, Vector3f R, trian
             R(0) += applied_reflection_color(0);
             R(1) += applied_reflection_color(1);
             R(2) += applied_reflection_color(2);
-            printf("%f, %f, %f\n", applied_reflection_color(0), applied_reflection_color(1), applied_reflection_color(2));
         }
     }
     
@@ -489,7 +490,6 @@ float computeSphereIntersection(sphere s, float x, float y) {
     float c = s.cx*s.cx + s.cy*s.cy + s.cz*s.cz - s.r*s.r;
     
     float discriminant = b*b - 4*a*c;
-    //printf("discriminant: %f\n",discriminant);
     if (discriminant <= 0) {
         return FLT_MAX;
     }
@@ -502,19 +502,19 @@ float computeTriangleIntersection(triangle t, float x, float y) {
     Matrix3f A;
     Vector3f b;
     
-    Vector3f v1(t.bx - t.ax, t.by - t.ay, t.bz - t.az);
-    Vector3f v2(t.cx - t.ax, t.cy - t.ay, t.cz - t.az);
+    Vector3f e1(t.bx - t.ax, t.by - t.ay, t.bz - t.az);
+    Vector3f e2(t.cx - t.ax, t.cy - t.ay, t.cz - t.az);
     
-    Vector3f cross_vector = v2.cross(v1);
+    Vector3f cross_vector = e2.cross(e1);
     
     if (abs(cross_vector(0)) < EPSILON && abs(cross_vector(1)) < EPSILON && abs(cross_vector(2)) < EPSILON) {
         return FLT_MAX;
     }
     
     b << -t.ax, -t.ay, -t.az;
-    A << -x, v1(0), v2(0),
-    -y, v1(1), v2(1),
-    1, v1(2), v2(2);
+    A << -x, e1(0), e2(0),
+    -y, e1(1), e2(1),
+    1, e1(2), e2(2);
     
     Vector3f x_vector = A.colPivHouseholderQr().solve(b);
     
@@ -768,10 +768,78 @@ float random_float()
 }
 
 
+struct point {
+    float x,y,z;
+};
+
+vector<triangle> objParser(const char* szFileName) {
+    ifstream myfile; //use all the method of the ifstream
+    vector<string*> coord;
+    vector<point> vertices;
+    vector<triangle> triangles;
+    
+    myfile.open(szFileName);
+    if(myfile.is_open())
+    {
+        //The file is open,use while loop to check file
+        char buf[256]; //create buffer to read line
+        while(!myfile.eof())//while we are not at the end of the file.
+        {
+            myfile.getline(buf,256);
+            coord.push_back(new string(buf));
+        }
+        for(int i = 0; i <coord.size(); i++)
+        {
+            //check if it's a comment or not
+            if(coord[i]->c_str()[0]=='#')
+                continue;
+            else if(coord[i]->c_str()[0]=='v' && coord[i]->c_str()[1]==' ')
+            {
+                char tmp;
+                float tmp_x,tmp_y,tmp_z;
+                
+                sscanf(coord[i]->c_str(),"v %f %f %f",&tmp_x,&tmp_y,&tmp_z); //read in the 3
+                point p = {tmp_x, tmp_y, tmp_z};
+                vertices.push_back(p);
+            }
+            else if (coord[i]->c_str()[0]=='f' && coord[i]->c_str()[1]==' ') {
+                char tmp;
+                int tmp_x,tmp_y,tmp_z;
+                sscanf(coord[i]->c_str(),"f %d %d %d",&tmp_x,&tmp_y,&tmp_z);
+                triangle thisTriangle;
+                thisTriangle.ax = vertices.at(tmp_x-1).x;
+                thisTriangle.ay = vertices.at(tmp_x-1).y;
+                thisTriangle.az = vertices.at(tmp_x-1).z;
+                thisTriangle.bx = vertices.at(tmp_y-1).x;
+                thisTriangle.by = vertices.at(tmp_y-1).y;
+                thisTriangle.bz = vertices.at(tmp_y-1).z;
+                thisTriangle.cx = vertices.at(tmp_z-1).x;
+                thisTriangle.cy = vertices.at(tmp_z-1).y;
+                thisTriangle.cz = vertices.at(tmp_z-1).z;
+                thisTriangle.mat_num = material_count - 1;
+                triangles.push_back(thisTriangle);
+            }
+        }
+        //Delete coord to avoid memory leaks
+        for(int i = 0; i < coord.size();i++)
+            delete coord[i];
+    }
+    else{
+        //Display error message, cause the file connot be opened
+        cout << "Error occured while opening file" << endl;
+    }
+    //once complete close file.
+    myfile.close();
+    printf("%lu", triangles.size());
+    return triangles;
+}
+
+
 //****************************************************
 // Parse Input
 //****************************************************
 void parseInput(int argc, char *argv[]) {
+    printf("parsing input");
     if (argc == 1) {
         printf("No arguments given, drawing a blank image...\n");
     }
@@ -861,6 +929,7 @@ void parseInput(int argc, char *argv[]) {
             temp.G = atof(argv[i+2]);
             temp.B = atof(argv[i+3]);
             al_array[ambient_light_count] = temp;
+            printf("added ambient");
             ambient_light_count += 1;
             i += 4;
         }
@@ -879,15 +948,25 @@ void parseInput(int argc, char *argv[]) {
             temp.krr = atof(argv[i+11]);
             temp.krg = atof(argv[i+12]);
             temp.krb = atof(argv[i+13]);
+            printf("added material");
             material_array[material_count] = temp;
             material_count += 1;
             i += 14;
         }
         else if (strcmp(argv[i], "obj") == 0) {
-            ambient_light temp;
-            temp.R = atof(argv[i+1]);
-            temp.G = atof(argv[i+2]);
-            temp.B = atof(argv[i+3]);
+            if(triangle_count >= 10)
+                printf("ERROR: Reached triangle count maximum. Apparently triangles are hard, so this is for your own good");
+            else if(!material_count)
+                printf("ERROR: No material to color these imported objects with");
+            else{
+                for(auto &tri : objParser(argv[i+1])){
+                    if(triangle_count >= 10)
+                        break;
+                    triangle_array[triangle_count] = tri;
+                    tri.print();
+                    triangle_count++;
+                }
+            }
             i += 2;
         }
         else if (strcmp(argv[i], "xft") == 0) {
@@ -926,13 +1005,10 @@ void parseInput(int argc, char *argv[]) {
         }
         else if (strcmp(argv[i], "filename") == 0) {
             int len = strlen(argv[i+1]);
-            printf("LEN: %i\n",len);
-            imageName = new char[len+4];
-            strncpy(imageName, argv[i+1], len);
-            imageName[len] = '.';
-            imageName[len+1] = 'b';
-            imageName[len+2] = 'm';
-            imageName[len+3] = 'p';
+            printf("filename len: %i\n",len);
+            image_name_str = argv[i+1];
+            strncpy(&image_name_str[0], argv[i+1], len);
+            (image_name_str + ".bmp").c_str();
             i += 2;
         }
         else {
@@ -945,7 +1021,9 @@ void parseInput(int argc, char *argv[]) {
 //****************************************************
 // The Draw Function, Opens Window and Fills in Pixels from Pixel Buffer
 //****************************************************
-void drawImage(string image_name) {
+void drawImage() {
+    clock_t t1,t2;
+    t1 = clock();
     fillBuffer();
     for (int i = 0; i < WIDTH; i++) {
         for (int j = 0; j < HEIGHT; j++){
@@ -954,22 +1032,32 @@ void drawImage(string image_name) {
             main_image(i, j, 2) = image_buffer[i][j].B;
         }
     }
-    CImgDisplay draw_disp(main_image, image_name.c_str());
+    CImgDisplay draw_disp(main_image, image_name_str.c_str());
+    t2 = clock();
+    printf("Rendering completed in %.2f sec\n", ((float)t2 - (float)t1) / CLOCKS_PER_SEC);
+    main_image.save((image_name_str + ".bmp").c_str());
+    printf("Saved image to %s\n", (image_name_str + ".bmp").c_str());
+    fclose(stdout);
     while (!draw_disp.is_closed()) {
         draw_disp.wait();
     }
+    
 }
 
 //****************************************************
 // The Main Function, Calls other big Functions
 //****************************************************
 int main(int argc, char *argv[]) {
-    string image_name = "";
-    for(int argi = 1; argi < argc - 1; argi++)
-        image_name += argv[argi] + string("_");
+    srand(time(NULL));
+    std::stringstream image_name;
+    for(int argi = 1; argi < argc; argi++)
+        image_name << argv[argi] << "_";
+    image_name << "recur_depth_" << RECURSION_DEPTH;
+    image_name_str = image_name.str();
+    if(image_name_str.length() > 40)
+        image_name_str = "default";
     parseInput(argc, argv);
     transformObjects();
-    drawImage(image_name);
-    main_image.save((image_name + ".bmp").c_str());
+    drawImage();
     return 0;
 }
